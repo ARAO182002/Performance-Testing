@@ -337,14 +337,74 @@ Suggestion: {latest["analysis"].get("suggestion")}
 # -------------------------------
 @app.get("/summary")
 def summary():
+    total_results = len(results)
+
+    if total_results == 0:
+        return {
+            "total_results": 0,
+            "summary_text": "No test results are available yet.",
+            "latest_5": []
+        }
+
+    latest_5 = results[-5:]
+
+    success_count = 0
+    warning_count = 0
+    client_error_count = 0
+    server_error_count = 0
+    correlation_issue_count = 0
+
+    for r in results:
+        analysis_data = r.get("analysis", {})
+        analysis_block = analysis_data.get("analysis", {})
+
+        analysis_type = analysis_block.get("type", "").lower()
+
+        if "success" in analysis_type:
+            success_count += 1
+        elif "performance warning" in analysis_type or "critical slow api" in analysis_type:
+            warning_count += 1
+        elif "client error" in analysis_type:
+            client_error_count += 1
+        elif "server error" in analysis_type:
+            server_error_count += 1
+
+        hardcoded = analysis_data.get("hardcoded_dynamic_issues", [])
+        correlation = analysis_data.get("correlation_suggestions", [])
+
+        if hardcoded or correlation:
+            correlation_issue_count += 1
+
+    summary_parts = []
+
+    summary_parts.append(f"Out of {total_results} API results, {success_count} are successful.")
+
+    if warning_count > 0:
+        summary_parts.append(f"{warning_count} show performance warnings.")
+
+    if client_error_count > 0:
+        summary_parts.append(f"{client_error_count} show client-side errors.")
+
+    if server_error_count > 0:
+        summary_parts.append(f"{server_error_count} show server-side errors.")
+
+    if correlation_issue_count > 0:
+        summary_parts.append(f"{correlation_issue_count} results indicate possible correlation or hardcoded dynamic value issues.")
+
+    if warning_count == 0 and client_error_count == 0 and server_error_count == 0:
+        summary_parts.append("Overall performance appears stable.")
+
+    summary_text = " ".join(summary_parts)
+
     return {
-        "total_results": len(results),
+        "total_results": total_results,
+        "summary_text": summary_text,
         "latest_5": [
             {
                 "api": r["api"],
-                "type": r["analysis"].get("type"),
-                "severity": r["analysis"].get("severity")
+                "type": r["analysis"].get("analysis", {}).get("type", "Unknown"),
+                "severity": r["analysis"].get("analysis", {}).get("severity", "Unknown")
             }
-            for r in results[-5:]
+            for r in latest_5
         ]
     }
